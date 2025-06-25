@@ -1,0 +1,19 @@
+opencv-python
+pandas
+numpy
+matplotlib
+notebook
+
+tensorflow==2.16.2
+torch
+scikit-learn
+openpyxl
+
+#API
+fastapi
+uvicorn
+python-multipart
+
+# Preprocessing
+scipy
+pydicom

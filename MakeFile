@@ -1,0 +1,282 @@
+# Makefile for FastAPI LLM API Project
+
+# Variables
+PYTHON := python3
+PIP := pip3
+VENV_NAME := venv
+VENV_PATH := ./$(VENV_NAME)
+APP_MODULE := main:app
+HOST := 0.0.0.0
+PORT := 8000
+WORKERS := 1
+
+# Colors for output
+GREEN := \033[0;32m
+YELLOW := \033[1;33m
+RED := \033[0;31m
+NC := \033[0m # No Color
+
+# Default target
+.DEFAULT_GOAL := help
+
+# Help target
+.PHONY: help
+help: ## Show this help message
+	@echo "$(GREEN)FastAPI LLM API - Available Commands:$(NC)"
+	@echo ""
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  $(YELLOW)%-20s$(NC) %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@echo ""
+
+# Environment setup
+.PHONY: install
+install: ## Install dependencies
+	@echo "$(GREEN)Installing dependencies...$(NC)"
+	$(PIP) install --upgrade pip
+	$(PIP) install -r requirements.txt
+
+.PHONY: install-dev
+install-dev: ## Install development dependencies
+	@echo "$(GREEN)Installing development dependencies...$(NC)"
+	$(PIP) install --upgrade pip
+	$(PIP) install -r requirements.txt
+	$(PIP) install -r requirements-dev.txt
+
+.PHONY: venv
+venv: ## Create virtual environment
+	@echo "$(GREEN)Creating virtual environment...$(NC)"
+	$(PYTHON) -m venv $(VENV_NAME)
+	@echo "$(YELLOW)Activate with: source $(VENV_PATH)/bin/activate$(NC)"
+
+.PHONY: venv-install
+venv-install: venv ## Create venv and install dependencies
+	@echo "$(GREEN)Installing dependencies in virtual environment...$(NC)"
+	$(VENV_PATH)/bin/pip install --upgrade pip
+	$(VENV_PATH)/bin/pip install -r requirements.txt
+
+.PHONY: requirements
+requirements: ## Generate requirements.txt from current environment
+	@echo "$(GREEN)Generating requirements.txt...$(NC)"
+	$(PIP) freeze > requirements.txt
+
+.PHONY: requirements-dev
+requirements-dev: ## Generate requirements-dev.txt
+	@echo "$(GREEN)Generating requirements-dev.txt...$(NC)"
+	@echo "# Development dependencies" > requirements-dev.txt
+	@echo "pytest>=7.0.0" >> requirements-dev.txt
+	@echo "pytest-asyncio>=0.21.0" >> requirements-dev.txt
+	@echo "httpx>=0.24.0" >> requirements-dev.txt
+	@echo "black>=23.0.0" >> requirements-dev.txt
+	@echo "flake8>=6.0.0" >> requirements-dev.txt
+	@echo "isort>=5.12.0" >> requirements-dev.txt
+	@echo "mypy>=1.0.0" >> requirements-dev.txt
+	@echo "pre-commit>=3.0.0" >> requirements-dev.txt
+
+# Development
+.PHONY: run
+run: ## Run the development server
+	@echo "$(GREEN)Starting development server...$(NC)"
+	uvicorn $(APP_MODULE) --host $(HOST) --port $(PORT) --reload
+
+.PHONY: run-prod
+run-prod: ## Run the production server
+	@echo "$(GREEN)Starting production server...$(NC)"
+	uvicorn $(APP_MODULE) --host $(HOST) --port $(PORT) --workers $(WORKERS)
+
+.PHONY: run-docker
+run-docker: ## Run with Docker
+	@echo "$(GREEN)Starting with Docker...$(NC)"
+	docker-compose up --build
+
+.PHONY: debug
+debug: ## Run with debug logging
+	@echo "$(GREEN)Starting with debug logging...$(NC)"
+	uvicorn $(APP_MODULE) --host $(HOST) --port $(PORT) --reload --log-level debug
+
+# Code quality
+.PHONY: format
+format: ## Format code with black and isort
+	@echo "$(GREEN)Formatting code...$(NC)"
+	black .
+	isort .
+
+.PHONY: lint
+lint: ## Lint code with flake8
+	@echo "$(GREEN)Linting code...$(NC)"
+	flake8 .
+
+.PHONY: type-check
+type-check: ## Type check with mypy
+	@echo "$(GREEN)Type checking...$(NC)"
+	mypy .
+
+.PHONY: check
+check: format lint type-check ## Run all code quality checks
+
+# Testing
+.PHONY: test
+test: ## Run tests
+	@echo "$(GREEN)Running tests...$(NC)"
+	pytest -v
+
+.PHONY: test-cov
+test-cov: ## Run tests with coverage
+	@echo "$(GREEN)Running tests with coverage...$(NC)"
+	pytest --cov=. --cov-report=html --cov-report=term-missing
+
+.PHONY: test-watch
+test-watch: ## Run tests in watch mode
+	@echo "$(GREEN)Running tests in watch mode...$(NC)"
+	pytest-watch
+
+# API testing
+.PHONY: test-api
+test-api: ## Test API endpoints manually
+	@echo "$(GREEN)Testing API endpoints...$(NC)"
+	@echo "$(YELLOW)Testing status endpoint...$(NC)"
+	curl -s http://localhost:$(PORT)/ | jq '.' || curl -s http://localhost:$(PORT)/
+	@echo ""
+	@echo "$(YELLOW)Testing model info...$(NC)"
+	curl -s http://localhost:$(PORT)/model-info | jq '.' || curl -s http://localhost:$(PORT)/model-info
+	@echo ""
+
+.PHONY: load-model
+load-model: ## Load the model via API
+	@echo "$(GREEN)Loading model...$(NC)"
+	curl -X POST http://localhost:$(PORT)/load-model
+
+.PHONY: unload-model
+unload-model: ## Unload the model via API
+	@echo "$(GREEN)Unloading model...$(NC)"
+	curl -X POST http://localhost:$(PORT)/unload-model
+
+.PHONY: test-generate
+test-generate: ## Test text generation
+	@echo "$(GREEN)Testing text generation...$(NC)"
+	curl -X POST "http://localhost:$(PORT)/generate" \
+		-H "Content-Type: application/json" \
+		-d '{"text": "Hello, how are you?", "max_length": 50, "temperature": 0.7}' | jq '.'
+
+.PHONY: test-chat
+test-chat: ## Test simple chat
+	@echo "$(GREEN)Testing chat endpoint...$(NC)"
+	curl -X POST "http://localhost:$(PORT)/chat" \
+		-H "Content-Type: application/json" \
+		-d '{"text": "Tell me a joke"}' | jq '.'
+
+# Database/Model management
+.PHONY: download-model
+download-model: ## Download model from Hugging Face
+	@echo "$(GREEN)Downloading model...$(NC)"
+	@read -p "Enter model name (e.g., microsoft/DialoGPT-medium): " model_name; \
+	$(PYTHON) -c "from transformers import AutoTokenizer, AutoModelForCausalLM; AutoTokenizer.from_pretrained('$$model_name'); AutoModelForCausalLM.from_pretrained('$$model_name')"
+
+# Docker
+.PHONY: docker-build
+docker-build: ## Build Docker image
+	@echo "$(GREEN)Building Docker image...$(NC)"
+	docker build -t fastapi-llm .
+
+.PHONY: docker-run
+docker-run: ## Run Docker container
+	@echo "$(GREEN)Running Docker container...$(NC)"
+	docker run -p $(PORT):$(PORT) --gpus all fastapi-llm
+
+.PHONY: docker-compose-up
+docker-compose-up: ## Start with docker-compose
+	@echo "$(GREEN)Starting with docker-compose...$(NC)"
+	docker-compose up -d
+
+.PHONY: docker-compose-down
+docker-compose-down: ## Stop docker-compose
+	@echo "$(GREEN)Stopping docker-compose...$(NC)"
+	docker-compose down
+
+# Cleanup
+.PHONY: clean
+clean: ## Clean up temporary files
+	@echo "$(GREEN)Cleaning up...$(NC)"
+	find . -type f -name "*.pyc" -delete
+	find . -type d -name "__pycache__" -delete
+	find . -type d -name "*.egg-info" -exec rm -rf {} +
+	find . -type d -name ".pytest_cache" -exec rm -rf {} +
+	find . -type d -name ".mypy_cache" -exec rm -rf {} +
+	rm -rf build/
+	rm -rf dist/
+	rm -rf htmlcov/
+
+.PHONY: clean-venv
+clean-venv: ## Remove virtual environment
+	@echo "$(GREEN)Removing virtual environment...$(NC)"
+	rm -rf $(VENV_PATH)
+
+.PHONY: clean-all
+clean-all: clean clean-venv ## Clean everything
+
+# Documentation
+.PHONY: docs
+docs: ## Generate API documentation
+	@echo "$(GREEN)Generating API documentation...$(NC)"
+	@echo "Visit http://localhost:$(PORT)/docs for Swagger UI"
+	@echo "Visit http://localhost:$(PORT)/redoc for ReDoc"
+
+.PHONY: export-openapi
+export-openapi: ## Export OpenAPI spec
+	@echo "$(GREEN)Exporting OpenAPI specification...$(NC)"
+	$(PYTHON) -c "import json; from main import app; print(json.dumps(app.openapi(), indent=2))" > openapi.json
+
+# Monitoring
+.PHONY: logs
+logs: ## Show application logs (if using docker-compose)
+	docker-compose logs -f
+
+.PHONY: health-check
+health-check: ## Check if the API is healthy
+	@echo "$(GREEN)Checking API health...$(NC)"
+	@curl -f http://localhost:$(PORT)/ > /dev/null 2>&1 && echo "$(GREEN)✓ API is healthy$(NC)" || echo "$(RED)✗ API is not responding$(NC)"
+
+# Git hooks
+.PHONY: install-hooks
+install-hooks: ## Install pre-commit hooks
+	@echo "$(GREEN)Installing pre-commit hooks...$(NC)"
+	pre-commit install
+
+# Development workflow
+.PHONY: dev-setup
+dev-setup: venv-install requirements-dev install-hooks ## Complete development setup
+	@echo "$(GREEN)Development setup complete!$(NC)"
+
+.PHONY: ci
+ci: check test ## Run CI pipeline locally
+
+# Production deployment
+.PHONY: deploy-prep
+deploy-prep: clean check test ## Prepare for deployment
+	@echo "$(GREEN)Deployment preparation complete!$(NC)"
+
+# Benchmarking
+.PHONY: benchmark
+benchmark: ## Run simple benchmark
+	@echo "$(GREEN)Running benchmark...$(NC)"
+	@echo "Warming up..."
+	@for i in {1..5}; do \
+		curl -s -X POST "http://localhost:$(PORT)/chat" \
+			-H "Content-Type: application/json" \
+			-d '{"text": "Hello"}' > /dev/null; \
+	done
+	@echo "Running benchmark..."
+	@time for i in {1..10}; do \
+		curl -s -X POST "http://localhost:$(PORT)/chat" \
+			-H "Content-Type: application/json" \
+			-d '{"text": "Hello"}' > /dev/null; \
+	done
+
+# Show current configuration
+.PHONY: config
+config: ## Show current configuration
+	@echo "$(GREEN)Current Configuration:$(NC)"
+	@echo "Python: $(shell $(PYTHON) --version)"
+	@echo "Host: $(HOST)"
+	@echo "Port: $(PORT)"
+	@echo "Workers: $(WORKERS)"
+	@echo "App Module: $(APP_MODULE)"
+	@echo "Virtual Env: $(VENV_PATH)"
