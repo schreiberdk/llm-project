@@ -3,6 +3,8 @@ from dotenv import load_dotenv
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+import re
+
 
 # Load .env variables
 load_dotenv()
@@ -27,3 +29,8 @@ def load_tl_model(model_path: str = None):
     )
 
     return tokenizer, model, device
+
+def format_list(text: str) -> str:
+    text = re.sub(r'(?<=\d)\. ', '.\n', text)  # Numbered lists
+    text = re.sub(r'(?<=\n)- ', '\n- ', text)  # Bullets (basic)
+    return text

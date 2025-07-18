@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from ml_logic.tiny_llama_logic import load_tl_model
 
+
 # Initialize API
 app = FastAPI()
 
@@ -35,6 +36,7 @@ async def prompt_model(request: PromptRequest):
     TEMPERATURE = float(os.getenv("TEMPERATURE", 0.8))
     TOP_P = float(os.getenv("TOP_P", 0.7))
     REP_PENALTY = float(os.getenv("REP_PENALTY", 1.1))
+    eos_token_id = tokenizer.eos_token_id or tokenizer.convert_tokens_to_ids("<|endoftext|>")
 
     # Check if parameters are reasonable
     assert 0 <= TEMPERATURE <= 1, "TEMPERATURE must be between 0 and 1"
@@ -49,11 +51,12 @@ async def prompt_model(request: PromptRequest):
         outputs = model.generate(
             **inputs,
             max_new_tokens=MAX_LENGTH_LIMIT,
-            eos_token_id=tokenizer.eos_token_id,
+            eos_token_id=eos_token_id,
             do_sample=True,
             temperature=TEMPERATURE,
             top_p=TOP_P,
-            repetition_penalty=REP_PENALTY
+            repetition_penalty=REP_PENALTY,
+            early_stopping=True
         )
 
         # Decode and return
@@ -62,6 +65,11 @@ async def prompt_model(request: PromptRequest):
         # Remove prompt from output
         if response.startswith(prompt):
             response = response[len(prompt):].lstrip()
+
+        # Truncate at known stop sequence
+        stop_sequence = "###"
+        if stop_sequence in response:
+            response = response.split(stop_sequence)[0].strip()
 
         return {"response": response}
 
