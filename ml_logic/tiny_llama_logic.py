@@ -4,6 +4,8 @@ from dotenv import load_dotenv
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import re
+from typing import Dict, List, Tuple
+
 
 
 # Load .env variables
@@ -30,7 +32,18 @@ def load_tl_model(model_path: str = None):
 
     return tokenizer, model, device
 
-def format_list(text: str) -> str:
-    text = re.sub(r'(?<=\d)\. ', '.\n', text)  # Numbered lists
-    text = re.sub(r'(?<=\n)- ', '\n- ', text)  # Bullets (basic)
-    return text
+
+def build_prompt_with_history(session_id: str, user_question: str, context: str, chat_memory: Dict[str, List[Tuple[str, str]]]) -> str:
+    history = chat_memory.get(session_id, [])
+
+    # Build chat format
+    dialogue = "<|system|>\nYou are a helpful and accurate medical assistant.\n\n"
+    dialogue += f"Context:\n{context}\n\n"
+
+    for user_msg, assistant_msg in history:
+        dialogue += f"<|user|>\n{user_msg}\n<|assistant|>\n{assistant_msg}\n"
+
+    # Append current question
+    dialogue += f"<|user|>\n{user_question}\n<|assistant|>"
+
+    return dialogue
