@@ -3,9 +3,18 @@ matplotlib
 notebook
 dotenv
 
-tensorflow==2.16.2
+#ML packages
+tensorflow
+tf-keras
 torch
 scikit-learn
+
+#langchain
+langchain
+langchain-community
+pypdf
+sentence-transformers
+faiss-cpu
 
 #API
 fastapi

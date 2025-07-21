@@ -2,34 +2,73 @@ import os
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from pydantic import BaseModel
-from ml_logic.tiny_llama_logic import load_tl_model
+from ml_logic.tiny_llama_logic import load_tl_model, build_prompt_with_history
+from ml_logic.context_retrieval import retrieve_context, load_vectorstore, build_vectorstore
+from typing import Dict, List, Tuple
 
+
+from pathlib import Path
 
 # Initialize API
 app = FastAPI()
 
-# Load model on startup
-tokenizer, model, device = load_tl_model()
-app.state.tokenizer = tokenizer
-app.state.model = model
-app.state.device = device
+# App startup procedure
+@app.on_event("startup")
+def startup_event():
+    print("🚀 Loading TinyLlama model...")
+    tokenizer, model, device = load_tl_model()
+    app.state.tokenizer = tokenizer
+    app.state.model = model
+    app.state.device = device
 
+    print("📚 Building vectorstore...")
+    build_vectorstore(pdf_folder="raw_data", index_path="vector_db")
 
-# Test route
+    print("📦 Loading vectorstore...")
+    vectorstore = load_vectorstore("vector_db")
+    print(f"✅ Vectorstore loaded with {len(vectorstore.docstore._dict)} documents.")
+
+    app.state.vectorstore = vectorstore
+
+# Define test route
 @app.get("/")
 def index():
     return {"status": "Up and running."}
 
+
+
+
 # Request model
 class PromptRequest(BaseModel):
     prompt: str
+    session_id: str = "default"  # could be a UUID or client token
+
+
+
 
 # Post route
 @app.post('/prompt_model')
 async def prompt_model(request: PromptRequest):
-    prompt = "### Human: " + request.prompt + "\n### Assistant:"
+    # Old prompt structure:
+    #prompt = "### Human: " + request.prompt + "\n### Assistant:"
+
+    #New prompt structure with Langchain
+    user_question = request.prompt
+    session_id = request.session_id
+    chat_memory = {}
+
+    # Use vectorstore from app state
+    vectorstore = app.state.vectorstore
+
+    # Retrieve relevant context chunks from your PDF vectorstore
+    context = retrieve_context(user_question, vectorstore)
+
+    # Build the TinyLlama chat-style prompt with injected context
+    prompt = build_prompt_with_history(session_id, user_question, context, chat_memory)
+
     tokenizer = app.state.tokenizer
     model = app.state.model
+    device = app.state.device
 
     # Fetch model parameters
     MAX_LENGTH_LIMIT = int(os.getenv("MAX_LENGTH_LIMIT", 256))
@@ -55,21 +94,21 @@ async def prompt_model(request: PromptRequest):
             do_sample=True,
             temperature=TEMPERATURE,
             top_p=TOP_P,
-            repetition_penalty=REP_PENALTY,
-            early_stopping=True
+            repetition_penalty=REP_PENALTY
         )
 
         # Decode and return
-        response = tokenizer.decode(outputs[0], skip_special_tokens=True)
-
-        # Remove prompt from output
-        if response.startswith(prompt):
-            response = response[len(prompt):].lstrip()
+        output_tokens = outputs[0]
+        input_length = inputs["input_ids"].shape[1]
+        new_tokens = output_tokens[input_length:]
+        response = tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
 
         # Truncate at known stop sequence
         stop_sequence = "###"
         if stop_sequence in response:
             response = response.split(stop_sequence)[0].strip()
+
+        chat_memory.setdefault(session_id, []).append((user_question, response))
 
         return {"response": response}
 
