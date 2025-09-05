@@ -1,13 +1,10 @@
 numpy
-matplotlib
-notebook
-dotenv
+python-dotenv
 
 #ML packages
-tensorflow
-tf-keras
 torch
-scikit-learn
+huggingface_hub
+accelerate
 
 #langchain
 langchain
