@@ -6,9 +6,15 @@
 .venv
 
 .huggingfacetoken.txt
+.dockerignore
 
 # Models
 models/
 
 # Data
 raw_data/
+
+# AWS
+aws/
+AWSCLIV2.pkg
+awscliv2
