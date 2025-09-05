@@ -28,7 +28,7 @@ test:
 # DOCKER SECTION #
 ##################
 IMAGE_NAME=257402714841.dkr.ecr.eu-north-1.amazonaws.com/llm-project
-TAG=latest-cpu
+TAG=latest
 
 # Build Docker image
 docker-build:
@@ -46,3 +46,8 @@ docker-push:
 # Stop all running containers (optional)
 docker-stop:
 	docker stop $(shell docker ps -q)
+
+# Push to ECR
+docker-push-ecr:
+	aws ecr get-login-password --region eu-north-1 | docker login --username AWS --password-stdin 257402714841.dkr.ecr.eu-north-1.amazonaws.com
+	docker push $(IMAGE_NAME):$(TAG)

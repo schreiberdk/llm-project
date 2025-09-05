@@ -5,15 +5,16 @@ import re
 from pydantic import BaseModel
 from ml_logic.model_logic import load_tl_model, build_prompt_with_history, StopOnTokens
 from ml_logic.context_retrieval import retrieve_context, load_vectorstore, build_vectorstore
+from ml_logic.s3_utlis import fetch_all_pdfs_from_s3
 from transformers import StoppingCriteriaList
 from typing import Dict, List, Tuple
-
-
-
 from pathlib import Path
 
 # Initialize API
 app = FastAPI()
+
+load_dotenv()
+topic_1 = os.getenv("S3_FOLDER_1")
 
 # App startup procedure
 @app.on_event("startup")
@@ -24,8 +25,11 @@ def startup_event():
     app.state.model = model
     app.state.device = device
 
+    print("📦 Fetching PDFs from S3...")
+    pdf_paths = fetch_all_pdfs_from_s3(topic_1)
+
     print("📚 Building vectorstore...")
-    build_vectorstore(pdf_folder="raw_data", index_path="vector_db")
+    build_vectorstore(pdf_folder="/tmp/pdf_data", index_path="vector_db")
 
     print("📦 Loading vectorstore...")
     vectorstore = load_vectorstore("vector_db")

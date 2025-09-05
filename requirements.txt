@@ -16,3 +16,6 @@ faiss-cpu
 #API
 fastapi
 uvicorn
+
+#AWS
+boto3
